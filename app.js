@@ -53,7 +53,36 @@ function parse(text){
  out.note=out.note.join(" ");if(out.type==="in")out.cat="Income";return out;
 }
 
-function add(e){items.push({id:Date.now()+Math.random(),...e});lastCur=e.cur;save();render();toast((e.type==="in"?"Income added ":"Added ")+fmt(e.amount,e.cur))}
+// ---- Cloud sync (Firebase Firestore) ----
+// Paste your Firebase web config here (Firebase console > Project settings > Your apps > Web app).
+const FB_CONFIG={apiKey:"AIzaSyDtMMEPaorboW8AjUxWDy7djI5nXo6qMgI",authDomain:"daily-expenses-7037d.firebaseapp.com",projectId:"daily-expenses-7037d",appId:"1:815904764615:web:0a66b5da11f15c5d8c04e2"};
+let db=null,vault=null,unsub=[];
+const syncOn=()=>!!(window.firebase&&FB_CONFIG.apiKey&&FB_CONFIG.projectId);
+const syncErr=()=>toast("Sync failed. Saved on this device.");
+const newCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(16).padStart(2,"0")).join("");
+const putItem=e=>{if(vault)vault.collection("items").doc(String(e.id)).set(e).catch(syncErr)};
+const delItem=id=>{if(vault)vault.collection("items").doc(String(id)).delete().catch(syncErr)};
+const putBudgets=()=>{if(vault)vault.set({budgets}).catch(syncErr)};
+function syncUI(){const c=ls.get("de-sync","");
+ $("syncInfo").textContent=!syncOn()?"Sync isn't set up yet: the Firebase config in app.js is empty."
+  :c?`Connected. Code: ${c}. Changes show up on every device that uses this code.`
+  :"Not connected. On your phone, tap \"Create new sync code\". Then open the copied link on your computer, or paste the code there.";
+ $("syncCode").value=c}
+function connect(code){
+ code=(code||"").trim();if(!syncOn()||code.length<20)return false;
+ if(!db){firebase.initializeApp(FB_CONFIG);db=firebase.firestore();db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}
+ unsub.forEach(f=>f());vault=db.collection("vaults").doc(code);
+ if(ls.get("de-merged","")!==code){ // first time on this device: upload what's already saved here
+  const b=db.batch();items.forEach(e=>b.set(vault.collection("items").doc(String(e.id)),e));
+  if(Object.keys(budgets).length)b.set(vault,{budgets},{merge:true});
+  b.commit().then(()=>ls.set("de-merged",code)).catch(syncErr)}
+ unsub=[
+  vault.collection("items").onSnapshot(s=>{items=s.docs.map(d=>d.data());ls.set("de-items",items);render()},syncErr),
+  vault.onSnapshot(s=>{const d=s.data();if(!d||!d.budgets)return;budgets=d.budgets;ls.set("de-budgets",budgets);
+   for(const i of document.querySelectorAll("[data-b]"))if(i!==document.activeElement)i.value=budgets[i.dataset.b]??"";render()},syncErr)];
+ ls.set("de-sync",code);syncUI();return true}
+
+function add(e){const it={id:Date.now()+Math.random(),...e};items.push(it);putItem(it);lastCur=e.cur;save();render();toast((e.type==="in"?"Income added ":"Added ")+fmt(e.amount,e.cur))}
 
 function render(){
  const d=new Date(ym[0],ym[1],1);
@@ -117,9 +146,9 @@ $("fFor").addEventListener("click",e=>{const b=e.target.closest(".pill");if(!b)r
 $("full").addEventListener("submit",e=>{e.preventDefault();const a=parseFloat($("fAmt").value);if(!(a>0))return;
  add({type:fType==="Income"?"in":"out",date:$("fDate").value,amount:a,cur:$("fCur").value,for:fFor,cat:fType==="Income"?"Income":$("fCat").value,note:$("fNote").value.trim()});$("fAmt").value="";$("fNote").value=""});
 $("list").addEventListener("click",e=>{const b=e.target.closest(".del");if(!b)return;const id=+b.dataset.id;const gone=items.find(x=>x.id===id);
- items=items.filter(x=>x.id!==id);save();render();toast("Deleted "+(gone?fmt(gone.amount,gone.cur):""))});
+ items=items.filter(x=>x.id!==id);delItem(id);save();render();toast("Deleted "+(gone?fmt(gone.amount,gone.cur):""))});
 $("rates").addEventListener("input",e=>{const c=e.target.dataset.r,v=parseFloat(e.target.value);if(c&&v>0){rates[c]=v;rateDate="";save();$("rateInfo").textContent="Using your own rates until the next automatic update.";render()}});
-$("budgets").addEventListener("input",e=>{const c=e.target.dataset.b;if(!c)return;const v=parseFloat(e.target.value);if(v>0)budgets[c]=v;else delete budgets[c];save();render()});
+$("budgets").addEventListener("input",e=>{const c=e.target.dataset.b;if(!c)return;const v=parseFloat(e.target.value);if(v>0)budgets[c]=v;else delete budgets[c];save();putBudgets();render()});
 $("prev").addEventListener("click",()=>{ym=ym[1]?[ym[0],ym[1]-1]:[ym[0]-1,11];render()});
 $("next").addEventListener("click",()=>{ym=ym[1]<11?[ym[0],ym[1]+1]:[ym[0]+1,0];render()});
 const rows=(withType)=>items.filter(e=>inMonth(e)&&(withType||e.type!=="in")).sort((a,b)=>a.date.localeCompare(b.date)).map(e=>{const r=[e.date,e.amount,e.cur,e.for,e.cat,e.note||""];if(withType)r.push(e.type==="in"?"Income":"Expense");return r});
@@ -130,5 +159,14 @@ $("csv").addEventListener("click",()=>{const q=v=>`"${String(v).replace(/"/g,'""
  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv"}));a.download=`expenses-${ym[0]}-${String(ym[1]+1).padStart(2,"0")}.csv`;a.click()});
 
 setup();rateUI();render();updateRates();
+{const h=location.hash.match(/sync=([0-9a-f]{20,})/i);if(h){ls.set("de-sync",h[1]);history.replaceState(null,"",location.pathname+location.search)}}
+syncUI();connect(ls.get("de-sync",""));
+$("syncForm").addEventListener("submit",e=>{e.preventDefault();if(!syncOn()){toast("Add the Firebase config first");return}
+ if(connect($("syncCode").value))toast("Connected");else toast("That code looks too short")});
+$("syncNew").addEventListener("click",()=>{if(!syncOn()){toast("Add the Firebase config first");return}
+ if(ls.get("de-sync","")&&!confirm("Replace the current sync code? Other devices will need the new one."))return;
+ connect(newCode());toast("New sync code created")});
+$("syncLink").addEventListener("click",async()=>{const c=ls.get("de-sync","");if(!c){toast("Create or enter a sync code first");return}
+ try{await navigator.clipboard.writeText(location.origin+location.pathname+"#sync="+c);toast("Link copied. Open it on your other device")}catch(e){toast("Copy was blocked by the browser")}});
 $("disp").addEventListener("click",e=>{const b=e.target.closest("[data-c]");if(!b)return;disp=b.dataset.c;save();render()});
 }

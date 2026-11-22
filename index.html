@@ -63,14 +63,28 @@
   <summary>Monthly budgets (in USD, shown in your chosen currency)</summary>
   <table id="budgets"></table>
  </details>
+ <details id="syncBox">
+  <summary>Sync between phone and computer</summary>
+  <p class="hint" id="syncInfo"></p>
+  <form id="syncForm" class="qrow" style="margin-top:10px">
+   <input id="syncCode" placeholder="Paste sync code" autocomplete="off" aria-label="Sync code">
+   <button class="btn" type="submit">Connect</button>
+  </form>
+  <div class="row">
+   <button class="btn soft" id="syncNew">Create new sync code</button>
+   <button class="btn soft" id="syncLink">Copy link for other device</button>
+  </div>
+ </details>
  <div class="row">
   <button class="btn soft" id="copy">Copy month for Google Sheets</button>
   <button class="btn soft" id="csv">Download CSV</button>
  </div>
- <p class="hint">Saved in this browser on this device. Copy for Google Sheets copies expenses only, in the same column order as your sheet: Date, Amount, Currency, For, Category, Note. The CSV includes income too.</p>
+ <p class="hint">Saved on this device, and synced online when sync is connected. Copy for Google Sheets copies expenses only, in the same column order as your sheet: Date, Amount, Currency, For, Category, Note. The CSV includes income too.</p>
 </main>
 <div class="toast" id="toast" role="status"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
