@@ -1,0 +1,134 @@
+{
+const CATS=["Food & cafes","Groceries","Transport","Fuel","Car","Housing & rent","Utilities & phone","Health","Kids","Shopping","Entertainment","Travel","Gifts","Subscriptions","Tour costs","Equipment","Marketing","Guides & staff","Taxes & fees","Other"];
+const INKEY=["income","salary","received","payment","paid-in","зарплата","доход","收入","薪水"];
+const FORS=["Family","Personal","G2M"],FC={Personal:"var(--p)",Family:"var(--f)",G2M:"var(--c)"};
+const CURS=["KGS","TWD","THB","USD"],SYM={KGS:"som",TWD:"NT$",THB:"฿",USD:"$"};
+const KEY={
+ cur:{KGS:["som","сом","kgs","c"],TWD:["nt","ntd","twd","nt$","元","台幣","台币"],THB:["baht","thb","฿","бат"],USD:["usd","$","dollar","dollars","доллар"]},
+ for:{Personal:["personal","me","my","я"],Family:["family","fam","kids","wife","семья"],G2M:["g2m","gotomountains","company","work","tour","biz","office","guest","guests","компания"]},
+ cat:{"Food & cafes":["food","lunch","dinner","breakfast","cafe","coffee","restaurant","eat","еда","обед"],"Groceries":["grocery","groceries","market","supermarket","продукты"],
+ "Transport":["taxi","bus","grab","metro","mrt","train","flight","yandex"],"Fuel":["fuel","gas","petrol","benzin","бензин"],"Car":["car","repair","parking","wash","tyre","tire"],
+ "Housing & rent":["rent","hotel","apartment","house"],"Utilities & phone":["phone","internet","electricity","water","sim"],"Health":["doctor","medicine","pharmacy","hospital","аптека"],
+ "Kids":["school","toys","toy","diapers"],"Shopping":["clothes","shopping","shoes"],"Entertainment":["movie","cinema","game","fun"],"Travel":["ticket","tickets","visa","trip"],
+ "Gifts":["gift","present"],"Subscriptions":["subscription","claude","artlist","netflix","domain"],"Tour costs":["guesthouse","yurt","permit","horse","horses","entrance"],
+ "Equipment":["camera","drone","lens","gear","tent","sd"],"Marketing":["ads","marketing","boost","promo"],"Guides & staff":["guide","driver","salary","staff","cook"],"Taxes & fees":["tax","fee","fees","bank"]}};
+
+const ls={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let items=ls.get("de-items",[]).map(e=>e.for==="Company"?{...e,for:"G2M"}:e),rates=ls.get("de-rates",{KGS:87.45,TWD:32.97,THB:33.93,USD:1}),budgets=ls.get("de-budgets",{});
+let disp=ls.get("de-disp","KGS"),rateDate=ls.get("de-ratedate","");
+let lastCur=ls.get("de-lastcur","KGS"),fFor="Personal",fType="Expense";
+const now=new Date();let ym=[now.getFullYear(),now.getMonth()];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const usd=e=>e.amount/(rates[e.cur]||1);
+const fmt=(n,c="USD")=>c==="USD"?"$"+n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}):n.toLocaleString("en-US",{maximumFractionDigits:2})+" "+SYM[c];
+const DISP=[["KGS","Som"],["TWD","TWD"],["THB","THB"]];
+if(!DISP.some(d=>d[0]===disp))disp="KGS";
+const M=v=>{const n=v*(rates[disp]||1),a=Math.abs(n),neg=n<0?"−":"";
+ if(disp==="USD")return neg+"$"+a.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+ if(disp==="TWD")return neg+"NT$"+a.toLocaleString("en-US",{maximumFractionDigits:0});
+ if(disp==="THB")return neg+"฿"+a.toLocaleString("en-US",{maximumFractionDigits:0});
+ return neg+a.toLocaleString("en-US",{maximumFractionDigits:0})+" som"};
+const save=()=>{ls.set("de-disp",disp);ls.set("de-ratedate",rateDate);ls.set("de-items",items);ls.set("de-rates",rates);ls.set("de-budgets",budgets);ls.set("de-lastcur",lastCur)};
+const toast=m=>{const t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),1600)};
+const inMonth=e=>{const[y,m]=e.date.split("-").map(Number);return y===ym[0]&&m-1===ym[1]};
+
+function parse(text){
+ const out={type:"out",amount:null,cur:lastCur,for:"Personal",cat:"Other",note:[]};
+ let tx=text.trim();if(tx.startsWith("+")){out.type="in";tx=tx.slice(1)}
+ const toks=tx.split(/\s+/).filter(Boolean);
+ for(let t of toks){
+  const low=t.toLowerCase();
+  const m=low.match(/^([$฿]?)(\d+(?:[.,]\d+)?)([a-zа-я$฿元]*)$/i);
+  if(m&&out.amount===null){out.amount=parseFloat(m[2].replace(",","."));const u=(m[1]||m[3]);if(u){for(const c of CURS)if(KEY.cur[c].includes(u))out.cur=c}continue}
+  let hit=false;
+  for(const c of CURS)if(KEY.cur[c].includes(low)){out.cur=c;hit=true}
+  for(const f of FORS)if(KEY.for[f].includes(low)){out.for=f;hit=true}
+  if(INKEY.includes(low)){out.type="in";if(low==="income"||low==="доход"||low==="收入")continue}
+  if(hit)continue;
+  for(const c in KEY.cat)if(KEY.cat[c].includes(low)&&out.cat==="Other")out.cat=c;
+  out.note.push(t);
+ }
+ out.note=out.note.join(" ");if(out.type==="in")out.cat="Income";return out;
+}
+
+function add(e){items.push({id:Date.now()+Math.random(),...e});lastCur=e.cur;save();render();toast((e.type==="in"?"Income added ":"Added ")+fmt(e.amount,e.cur))}
+
+function render(){
+ const d=new Date(ym[0],ym[1],1);
+ $("mlabel").textContent=d.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+ const all=items.filter(inMonth).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+ const mon=all.filter(e=>e.type!=="in"),inc=all.filter(e=>e.type==="in");
+ const tot=mon.reduce((s,e)=>s+usd(e),0),tin=inc.reduce((s,e)=>s+usd(e),0),left=tin-tot;
+ $("total").textContent=M(left);$("total").classList.toggle("neg",left<0);
+ $("sIn").textContent=M(tin);$("sOut").textContent=M(tot);
+ $("disp").innerHTML=DISP.map(([c,l])=>`<button data-c="${c}" aria-pressed="${c===disp}">${l}</button>`).join("");
+ $("leftLbl").textContent="Left this month, in "+DISP.find(d=>d[0]===disp)[1];
+ $("tsub").textContent=tin?`You spent ${Math.round(tot/tin*100)}% of your income. Spending by pocket:`:"Add your income to see what's left. Spending by pocket:";
+ const byFor=FORS.map(f=>[f,mon.filter(e=>e.for===f).reduce((s,e)=>s+usd(e),0)]);
+ $("bar").innerHTML=tot?byFor.map(([f,v])=>`<i style="width:${v/tot*100}%;background:${FC[f]}"></i>`).join(""):"";
+ $("legend").innerHTML=byFor.map(([f,v])=>`<span><span class="dot" style="background:${FC[f]}"></span>${f} <b>${M(v)}</b></span>`).join("");
+ $("cur").innerHTML=CURS.map(c=>{const v=mon.filter(e=>e.cur===c).reduce((s,e)=>s+e.amount,0);return `<div><b>${v.toLocaleString("en-US",{maximumFractionDigits:0})}</b><span>${c}</span></div>`}).join("");
+ let h="",last="";
+ for(const e of all){
+  const isIn=e.type==="in";
+  if(e.date!==last){last=e.date;h+=`<div class="day">${new Date(e.date+"T00:00").toLocaleDateString("en-US",{weekday:"short",day:"numeric",month:"short"})}</div>`}
+  h+=`<div class="it"><span class="dot" style="background:${FC[e.for]}"></span><div class="tx"><b>${esc(e.note||e.cat)}</b><span>${esc(e.cat)} · ${e.for}</span></div>
+  <div class="amt ${isIn?"inc":""}">${isIn?"+":""}${fmt(e.amount,e.cur)}<small>${e.cur===disp?"":"≈ "+M(usd(e))}</small></div><button class="del" data-id="${e.id}" aria-label="Delete">✕</button></div>`;
+ }
+ $("list").innerHTML=h||`<p class="empty">Nothing added this month yet.</p>`;
+ $("groups").innerHTML=FORS.map(f=>{const es=mon.filter(e=>e.for===f),v=es.reduce((a,e)=>a+usd(e),0),gi=inc.filter(e=>e.for===f).reduce((a,e)=>a+usd(e),0);
+  const top=CATS.map(c=>[c,es.filter(e=>e.cat===c).reduce((a,e)=>a+usd(e),0)]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]);
+  return `<div class="g" style="border-top-color:${FC[f]}"><b>${f}</b><div class="v">${M(v)}</div><div class="sub">${tot?Math.round(v/tot*100):0}% of spending${gi?` · income ${M(gi)}`:""}</div>
+  ${top.length?`<ul>${top.map(([c,x])=>`<li><span>${c}</span><span>${M(x)}</span></li>`).join("")}</ul>`:`<div class="sub" style="margin-top:8px">Nothing yet</div>`}</div>`}).join("");
+ const cats=CATS.map(c=>{const es=mon.filter(e=>e.cat===c);return{c,v:es.reduce((s,e)=>s+usd(e),0),parts:FORS.map(f=>es.filter(e=>e.for===f).reduce((s,e)=>s+usd(e),0))}}).filter(x=>x.v||budgets[x.c]).sort((a,b)=>b.v-a.v);
+ const max=Math.max(1,...cats.map(x=>Math.max(x.v,budgets[x.c]||0)));
+ $("cats").innerHTML=cats.length?cats.map(x=>{const b=+budgets[x.c]||0,ov=b&&x.v>b,scale=b?Math.max(b,x.v):max;
+  return `<div class="cat"><div class="r"><span>${x.c}</span><span class="${ov?"over":""}">${M(x.v)}${b?` / ${M(b)}`:""}</span></div>
+  <div class="cbar">${x.parts.map((p,i)=>`<i style="width:${p/scale*100}%;background:${FC[FORS[i]]}"></i>`).join("")}</div>${b?`<div class="sub ${ov?"over":""}">${ov?"Over by "+M(x.v-b):M(b-x.v)+" left"}</div>`:""}</div>`}).join("")
+  :"";
+}
+
+function rateUI(){for(const c of CURS){const i=$("r-"+c);if(i)i.value=rates[c]}
+ $("rateInfo").textContent=rateDate?"Updated automatically "+rateDate+". You can also type your own.":"Using saved rates. They update automatically when you're online."}
+async function updateRates(){
+ try{const ctl=new AbortController();setTimeout(()=>ctl.abort(),8000);
+  const res=await fetch("https://open.er-api.com/v6/latest/USD",{signal:ctl.signal});const j=await res.json();
+  if(j&&j.result==="success"){let ok=false;for(const c of CURS){const v=j.rates&&j.rates[c];if(v>0){rates[c]=v;ok=true}}
+   if(ok){rateDate=new Date().toLocaleDateString("en-US",{day:"numeric",month:"short",year:"numeric"});save();rateUI();render()}}}
+ catch(e){}}
+function setup(){
+ $("fCur").innerHTML=CURS.map(c=>`<option>${c}</option>`).join("");$("fCur").value=lastCur;
+ $("fCat").innerHTML=CATS.map(c=>`<option>${c}</option>`).join("");
+ $("fType").innerHTML=["Expense","Income"].map(t=>`<button type="button" class="pill" data-v="${t}" aria-pressed="${t===fType}">${t}</button>`).join("");
+ $("fFor").innerHTML=FORS.map(f=>`<button type="button" class="pill" data-v="${f}" aria-pressed="${f===fFor}">${f}</button>`).join("");
+ $("fDate").value=iso(new Date());
+ $("rates").innerHTML=CURS.filter(c=>c!=="USD").map(c=>`<tr><td><label for="r-${c}">${c}</label></td><td><input type="number" step="0.01" id="r-${c}" data-r="${c}" value="${rates[c]}"></td></tr>`).join("");
+ $("budgets").innerHTML=CATS.map((c,i)=>`<tr><td><label for="b-${i}">${c}</label></td><td><input type="number" min="0" id="b-${i}" data-b="${c}" placeholder="No budget" value="${budgets[c]??""}"></td></tr>`).join("");
+}
+
+$("q").addEventListener("input",e=>{const p=parse(e.target.value);
+ $("preview").textContent=e.target.value.trim()?(p.amount===null?"Add an amount, like 200":`${p.type==="in"?"Income +":""}${fmt(p.amount,p.cur)} · ${p.cat} · ${p.for}${p.note?" · "+p.note:""}`):"Type like a message: amount, currency, what, and who it's for. For income, start with + or write income: +60000 som salary"});
+$("quick").addEventListener("submit",e=>{e.preventDefault();const p=parse($("q").value);if(p.amount===null){toast("Add an amount first");return}
+ add({type:p.type,date:iso(new Date()),amount:p.amount,cur:p.cur,for:p.for,cat:p.cat,note:p.note});$("q").value="";$("q").dispatchEvent(new Event("input"))});
+$("fType").addEventListener("click",e=>{const b=e.target.closest(".pill");if(!b)return;fType=b.dataset.v;for(const x of $("fType").children)x.setAttribute("aria-pressed",x.dataset.v===fType);$("fCat").disabled=fType==="Income";$("fBtn").textContent=fType==="Income"?"Add income":"Add expense"});
+$("fFor").addEventListener("click",e=>{const b=e.target.closest(".pill");if(!b)return;fFor=b.dataset.v;for(const x of $("fFor").children)x.setAttribute("aria-pressed",x.dataset.v===fFor)});
+$("full").addEventListener("submit",e=>{e.preventDefault();const a=parseFloat($("fAmt").value);if(!(a>0))return;
+ add({type:fType==="Income"?"in":"out",date:$("fDate").value,amount:a,cur:$("fCur").value,for:fFor,cat:fType==="Income"?"Income":$("fCat").value,note:$("fNote").value.trim()});$("fAmt").value="";$("fNote").value=""});
+$("list").addEventListener("click",e=>{const b=e.target.closest(".del");if(!b)return;const id=+b.dataset.id;const gone=items.find(x=>x.id===id);
+ items=items.filter(x=>x.id!==id);save();render();toast("Deleted "+(gone?fmt(gone.amount,gone.cur):""))});
+$("rates").addEventListener("input",e=>{const c=e.target.dataset.r,v=parseFloat(e.target.value);if(c&&v>0){rates[c]=v;rateDate="";save();$("rateInfo").textContent="Using your own rates until the next automatic update.";render()}});
+$("budgets").addEventListener("input",e=>{const c=e.target.dataset.b;if(!c)return;const v=parseFloat(e.target.value);if(v>0)budgets[c]=v;else delete budgets[c];save();render()});
+$("prev").addEventListener("click",()=>{ym=ym[1]?[ym[0],ym[1]-1]:[ym[0]-1,11];render()});
+$("next").addEventListener("click",()=>{ym=ym[1]<11?[ym[0],ym[1]+1]:[ym[0]+1,0];render()});
+const rows=(withType)=>items.filter(e=>inMonth(e)&&(withType||e.type!=="in")).sort((a,b)=>a.date.localeCompare(b.date)).map(e=>{const r=[e.date,e.amount,e.cur,e.for,e.cat,e.note||""];if(withType)r.push(e.type==="in"?"Income":"Expense");return r});
+$("copy").addEventListener("click",async()=>{const t=rows(false).map(r=>r.join("\t")).join("\n");if(!t){toast("Nothing to copy");return}
+ try{await navigator.clipboard.writeText(t);toast("Copied. Paste into the Expenses tab")}catch(e){toast("Copy was blocked by the browser")}});
+$("csv").addEventListener("click",()=>{const q=v=>`"${String(v).replace(/"/g,'""')}"`;
+ const t=[["Date","Amount","Currency","For","Category","Note","Type"],...rows(true)].map(r=>r.map(q).join(",")).join("\n");
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv"}));a.download=`expenses-${ym[0]}-${String(ym[1]+1).padStart(2,"0")}.csv`;a.click()});
+
+setup();rateUI();render();updateRates();
+$("disp").addEventListener("click",e=>{const b=e.target.closest("[data-c]");if(!b)return;disp=b.dataset.c;save();render()});
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Expenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+ <div class="top">
+  <h1 style="font-size:18px">Daily Expenses</h1>
+  <div class="mon"><button class="ib" id="prev" aria-label="Previous month">‹</button><span id="mlabel"></span><button class="ib" id="next" aria-label="Next month">›</button></div>
+ </div>
+ <div class="seg" id="disp" role="group" aria-label="Show totals in"></div>
+ <div class="sub" style="margin-top:14px" id="leftLbl">Left this month</div>
+ <div class="total" id="total" style="margin-top:2px">$0</div>
+ <div class="sums"><div><span>Income</span><b id="sIn" class="inc">$0</b></div><div><span>Spent</span><b id="sOut">$0</b></div></div>
+ <div class="sub" id="tsub"></div>
+ <div class="bar" id="bar"></div>
+ <div class="legend" id="legend"></div>
+
+ <section class="add">
+  <form id="quick" class="qrow">
+   <input id="q" placeholder="200 som lunch family" autocomplete="off" aria-label="Quick add">
+   <button class="btn" type="submit">Add</button>
+  </form>
+  <p class="hint" id="preview">Type like a message: amount, currency, what, and who it's for. For income, start with + or write income: +60000 som salary</p>
+  <details>
+   <summary>Add with full form (expense or income)</summary>
+   <form id="full" class="grid">
+    <div class="pills full" id="fType"></div>
+    <input type="date" id="fDate" aria-label="Date" required>
+    <input type="number" id="fAmt" step="0.01" min="0" placeholder="Amount" aria-label="Amount" required>
+    <select id="fCur" aria-label="Currency"></select>
+    <select id="fCat" aria-label="Category"></select>
+    <div class="pills full" id="fFor"></div>
+    <input class="full" id="fNote" placeholder="Note (optional)" aria-label="Note">
+    <button class="btn full" type="submit" id="fBtn">Add expense</button>
+   </form>
+  </details>
+ </section>
+
+ <h2>Spent by currency</h2>
+ <div class="cur" id="cur"></div>
+
+ <h2>Income and expenses</h2>
+ <div id="list"></div>
+
+ <h2>Categories</h2>
+ <div class="groups" id="groups"></div>
+ <div id="cats"></div>
+
+ <h2>Settings</h2>
+ <details>
+  <summary>Exchange rates (per 1 USD)</summary>
+  <p class="hint" id="rateInfo"></p>
+  <table id="rates"></table>
+ </details>
+ <details>
+  <summary>Monthly budgets (in USD, shown in your chosen currency)</summary>
+  <table id="budgets"></table>
+ </details>
+ <div class="row">
+  <button class="btn soft" id="copy">Copy month for Google Sheets</button>
+  <button class="btn soft" id="csv">Download CSV</button>
+ </div>
+ <p class="hint">Saved in this browser on this device. Copy for Google Sheets copies expenses only, in the same column order as your sheet: Date, Amount, Currency, For, Category, Note. The CSV includes income too.</p>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
